@@ -34,7 +34,7 @@ kubectl-userdel <username>
 ```
 ✔ Removes the user and their associated RBAC permissions.
 
-## Log in as a User
+# Log in as a User
 ```
 kubectl-login <username>
 ```
