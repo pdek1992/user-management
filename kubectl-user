@@ -1,0 +1,151 @@
+#!/bin/bash
+
+# Colors for better UI
+RED=$(tput setaf 1)
+GREEN=$(tput setaf 2)
+YELLOW=$(tput setaf 3)
+CYAN=$(tput setaf 6)
+BOLD=$(tput bold)
+RESET=$(tput sgr0)
+
+SECRET_NAME="kube-user-passwords"
+NAMESPACE="kube-system"
+
+CLUSTERS=($(kubectl config get-clusters | tail -n +2))
+NUM_CLUSTERS=${#CLUSTERS[@]}
+
+if [[ $NUM_CLUSTERS -eq 0 ]]; then
+    echo -e "${RED}❌ No Kubernetes clusters found.${RESET}"
+    exit 1
+elif [[ $NUM_CLUSTERS -eq 1 ]]; then
+    CLUSTER_NAME=${CLUSTERS[0]}
+else
+    echo -e "${BOLD}${CYAN}🔹 Multiple clusters detected. Please select:${RESET}"
+    select CLUSTER_NAME in "${CLUSTERS[@]}"; do
+        if [[ -n "$CLUSTER_NAME" ]]; then
+            break
+        fi
+        echo -e "${RED}❌ Invalid selection. Try again.${RESET}"
+    done
+fi
+
+echo -e "${GREEN}✅ Using cluster: ${CLUSTER_NAME}${RESET}"
+
+if ! kubectl get secret "$SECRET_NAME" -n "$NAMESPACE" >/dev/null 2>&1; then
+    kubectl create secret generic "$SECRET_NAME" -n "$NAMESPACE" --from-literal=users="$(echo "{}" | base64 -w 0)" >/dev/null 2>&1
+fi
+
+delete_user() {
+    echo -e "\n${BOLD}${CYAN}🔹 Enter the username to delete:${RESET} "
+    read -r USERNAME
+    CONTEXT="${USERNAME}-context"
+    ROLE_BINDING_NAME="${USERNAME}-role"
+
+    if ! kubectl config get-contexts -o name | grep -q "^${CONTEXT}$"; then
+        echo -e "${RED}❌ User '${USERNAME}' not found.${RESET}"
+        exit 1
+    fi
+
+    kubectl delete csr "${USERNAME}-csr" --ignore-not-found --force --grace-period=0 >/dev/null 2>&1
+    kubectl config unset users."${USERNAME}" >/dev/null 2>&1
+    kubectl config unset contexts."${CONTEXT}" >/dev/null 2>&1
+    kubectl delete clusterrolebinding "${ROLE_BINDING_NAME}" --ignore-not-found --force --grace-period=0 >/dev/null 2>&1
+
+    USERS_JSON=$(kubectl get secret "$SECRET_NAME" -n "$NAMESPACE" -o jsonpath="{.data.users}" | base64 --decode 2>/dev/null || echo "{}")
+    UPDATED_JSON=$(echo "$USERS_JSON" | sed "/\"$USERNAME\" *: *\"[^\"]*\"/d")
+
+    ENCODED_JSON=$(echo -n "$UPDATED_JSON" | base64 -w 0)
+    kubectl patch secret "$SECRET_NAME" -n "$NAMESPACE" --type='json' -p="[{'op': 'replace', 'path': '/data/users', 'value': \"$ENCODED_JSON\"}]" >/dev/null 2>&1
+
+    echo -e "${GREEN}✅ User '${USERNAME}' deleted successfully.${RESET}"
+    exit 0
+}
+
+echo -e "\n${BOLD}${CYAN}========= Kubernetes User Manager =========${RESET}"
+echo -e "${BOLD}${CYAN}1) Create User${RESET}"
+echo -e "${BOLD}${CYAN}2) Delete User${RESET}"
+read -rp "➡ Enter choice (1 or 2): " CHOICE
+
+if [[ "$CHOICE" == "2" ]]; then
+    delete_user
+elif [[ "$CHOICE" != "1" ]]; then
+    echo -e "${RED}❌ Invalid selection! Please enter 1 or 2.${RESET}"
+    exit 1
+fi
+
+echo -e "\n${BOLD}${CYAN}🔹 Enter new username:${RESET} "
+read -r USERNAME
+
+echo -e "\n${BOLD}${CYAN}🔹 Select role:${RESET}"
+echo -e "${YELLOW}  1) ReadOnly ${RESET}"
+echo -e "${YELLOW}  2) ReadWrite ${RESET}"
+echo -e "${YELLOW}  3) Admin ${RESET}"
+read -rp "➡ Enter role (1, 2, or 3): " ROLE_CHOICE
+
+case "$ROLE_CHOICE" in
+    1) ROLE="view" ;;
+    2) ROLE="edit" ;;
+    3) ROLE="cluster-admin" ;;
+    *) echo -e "${RED}❌ Invalid role selection!${RESET}"; exit 1 ;;
+esac
+
+echo -e "\n${BOLD}${CYAN}🔹 Set password for '${USERNAME}':${RESET} "
+read -rs PASSWORD
+HASHED_PASSWORD=$(echo -n "$PASSWORD" | sha256sum | awk '{print $1}')
+
+USERS_JSON=$(kubectl get secret "$SECRET_NAME" -n "$NAMESPACE" -o jsonpath="{.data.users}" | base64 --decode 2>/dev/null || echo "{}")
+UPDATED_JSON=$(echo "$USERS_JSON" | sed "/^{/a \"$USERNAME\": \"$HASHED_PASSWORD\",")
+ENCODED_JSON=$(echo -n "$UPDATED_JSON" | base64 -w 0)
+
+kubectl patch secret "$SECRET_NAME" -n "$NAMESPACE" --type='json' -p="[{'op': 'replace', 'path': '/data/users', 'value': \"$ENCODED_JSON\"}]" >/dev/null 2>&1
+
+echo -e "\n${BOLD}${CYAN}🔹 Generating user credentials...${RESET}"
+
+rm -f "${USERNAME}.key" "${USERNAME}.crt" "${USERNAME}.csr"
+
+openssl genrsa -out "${USERNAME}.key" 2048 >/dev/null 2>&1
+openssl req -new -key "${USERNAME}.key" -out "${USERNAME}.csr" -subj "/CN=${USERNAME}/O=kube-users" >/dev/null 2>&1
+
+CSR_DATA=$(base64 -w 0 < "${USERNAME}.csr")
+CSR_FILE="${USERNAME}-csr.yaml"
+
+cat <<EOF > "$CSR_FILE"
+apiVersion: certificates.k8s.io/v1
+kind: CertificateSigningRequest
+metadata:
+  name: ${USERNAME}-csr
+spec:
+  request: ${CSR_DATA}
+  signerName: kubernetes.io/kube-apiserver-client
+  usages:
+  - client auth
+EOF
+
+kubectl delete csr "${USERNAME}-csr" --ignore-not-found --force --grace-period=0 >/dev/null 2>&1
+kubectl apply -f "$CSR_FILE" >/dev/null 2>&1
+kubectl certificate approve "${USERNAME}-csr" >/dev/null 2>&1
+
+for i in {1..5}; do
+    CERTIFICATE=$(kubectl get csr "${USERNAME}-csr" -o jsonpath='{.status.certificate}')
+    if [[ -n "$CERTIFICATE" ]]; then
+        break
+    fi
+    sleep 2
+done
+
+if [[ -z "$CERTIFICATE" ]]; then
+    echo -e "${RED}❌ Certificate approval failed!${RESET}"
+    kubectl get csr "${USERNAME}-csr" -o yaml  # Debugging information
+    exit 1
+fi
+
+echo "$CERTIFICATE" | base64 -d > "${USERNAME}.crt"
+
+kubectl config set-credentials "${USERNAME}" --client-certificate="${USERNAME}.crt" --client-key="${USERNAME}.key" --embed-certs=true >/dev/null 2>&1
+kubectl config set-context "${USERNAME}-context" --cluster="${CLUSTER_NAME}" --user="${USERNAME}" >/dev/null 2>&1
+
+kubectl create clusterrolebinding "${USERNAME}-role" --clusterrole="${ROLE}" --user="${USERNAME}" --dry-run=client -o yaml | kubectl apply -f - >/dev/null 2>&1
+
+rm -f "${USERNAME}.csr" "$CSR_FILE" "${USERNAME}.crt" "${USERNAME}.key" "${USERNAME}.yaml"
+kubectl delete csr "${USERNAME}-csr" --ignore-not-found --force --grace-period=0 >/dev/null 2>&1
+echo -e "${GREEN}✅ User '${USERNAME}' created successfully.${RESET}"
