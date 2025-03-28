@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Colors
+
 RED=$(tput setaf 1)
 GREEN=$(tput setaf 2)
 CYAN=$(tput setaf 6)
@@ -10,13 +10,13 @@ RESET=$(tput sgr0)
 SECRET_NAME="kube-user-passwords"
 NAMESPACE="kube-system"
 
-# Function to print usage
+
 usage() {
     echo -e "${CYAN}Usage: kubectl login <username>${RESET}"
     exit 1
 }
 
-# Check if exactly one argument is provided
+
 if [[ $# -ne 1 ]]; then
     echo -e "${RED}Error: Single value for user expected.${RESET}"
     usage
@@ -25,28 +25,26 @@ fi
 USERNAME=$1
 CONTEXT="${USERNAME}-context"
 
-# Validate that kubectl is available
+
 if ! command -v kubectl &>/dev/null; then
     echo -e "${RED}Error: kubectl command not found. Please install kubectl.${RESET}"
     exit 1
 fi
 
-# Check if the user exists in kubeconfig
+
 if ! kubectl config get-contexts -o name | grep -q "^${CONTEXT}$"; then
     echo -e "${RED}Error: User '${USERNAME}' not found.${RESET}"
     exit 1
 fi
 
-# Fetch stored passwords from the secret
+
 SECRET_DATA=$(kubectl get secret "$SECRET_NAME" -n "$NAMESPACE" -o jsonpath="{.data.users}" 2>/dev/null | base64 --decode)
 
-# Check if secret data is retrieved successfully
 if [[ -z "$SECRET_DATA" ]]; then
     echo -e "${RED}Error: Unable to retrieve secret '$SECRET_NAME' in namespace '$NAMESPACE'.${RESET}"
     exit 1
 fi
 
-# Extract the stored hash for the given user without using jq
 STORED_HASH=$(echo "$SECRET_DATA" | grep -o "\"$USERNAME\":\"[^\"]*\"" | awk -F '":"' '{print $2}' | tr -d '"')
 
 if [[ -z "$STORED_HASH" ]]; then
@@ -54,26 +52,25 @@ if [[ -z "$STORED_HASH" ]]; then
     exit 1
 fi
 
-# Prompt for password input
+
 echo -e "\n${CYAN}Enter password:${RESET}"
 read -s INPUT_PASSWORD
 
-# Check if input is empty
+
 if [[ -z "$INPUT_PASSWORD" ]]; then
     echo -e "${YELLOW}Warning: Password cannot be empty.${RESET}"
     exit 1
 fi
 
-# Hash the input password
 INPUT_HASH=$(echo -n "$INPUT_PASSWORD" | sha256sum | awk '{print $1}')
 
-# Validate password
+
 if [[ "$INPUT_HASH" != "$STORED_HASH" ]]; then
     echo -e "${RED}Error: Incorrect password.${RESET}"
     exit 1
 fi
 
-# Switch to the user's context
+
 kubectl config use-context "$CONTEXT" >/dev/null 2>&1
 if [[ $? -eq 0 ]]; then
     echo -e "${GREEN}✅ Successfully switched to ${USERNAME}.${RESET}"
