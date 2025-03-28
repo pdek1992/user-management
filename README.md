@@ -21,20 +21,20 @@ This will:
 ✔ Download & install the plugins (kubectl-useradd, kubectl-userdel, kubectl-login).
 ✔ Make them executable and add them to your system’s PATH.
 
-💡 Usage
-##Add a New User
+💡 Usage<br>
+# Add a New User
 ```
 kubectl-useradd <username>
 ```
 ✔ Creates a Kubernetes user with the necessary permissions.
 
-##Delete a User
+# Delete a User
 ```
 kubectl-userdel <username>
 ```
 ✔ Removes the user and their associated RBAC permissions.
 
-##Log in as a User
+## Log in as a User
 ```
 kubectl-login <username>
 ```
