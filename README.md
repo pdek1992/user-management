@@ -1,24 +1,24 @@
 Kubernetes User management 
 
-1️⃣ kubectl-useradd – Automates user creation and access setup.
-2️⃣ kubectl-userdel – Removes users and cleans up permissions.
-3️⃣ kubectl-login – Enables users to log in securely.
+1️⃣ kubectl-useradd – Automates user creation and access setup.<br>
+2️⃣ kubectl-userdel – Removes users and cleans up permissions.<br>
+3️⃣ kubectl-login – Enables users to log in securely
+.<br>
+🚀 Why Use KubePlugins? <br>
+✅ Automates User Management – No manual kubeconfig edits or cert generation.<br>
+✅ Enhances Security – Follows Kubernetes best practices.<br>
+✅ Saves Time – Reduces repetitive tasks for DevOps teams.<br>
+✅ Eliminates Errors – Avoids misconfigurations in RBAC.<br>
 
-🚀 Why Use KubePlugins?
-✅ Automates User Management – No manual kubeconfig edits or cert generation.
-✅ Enhances Security – Follows Kubernetes best practices.
-✅ Saves Time – Reduces repetitive tasks for DevOps teams.
-✅ Eliminates Errors – Avoids misconfigurations in RBAC.
-
-📌 Installation
+📌 Installation<br>
 Run the following command to install all plugins:
 
 ```
  curl -sSL https://raw.githubusercontent.com/pdek1992/user-management/main/install.sh | sudo bash
 ```
 This will:
-✔ Download & install the plugins (kubectl-useradd, kubectl-userdel, kubectl-login).
-✔ Make them executable and add them to your system’s PATH.
+✔ Download & install the plugins (kubectl-useradd, kubectl-userdel, kubectl-login).<br>
+✔ Make them executable and add them to your system’s PATH.<br>
 
 💡 Usage<br>
 # Add a New User
