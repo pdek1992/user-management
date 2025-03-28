@@ -38,7 +38,6 @@ kubectl-userdel <username>
 ```
 kubectl-login <username>
 ```
-✔ Switches Kubernetes context securely after authentication.
 
 📍 Future Roadmap
 🔜 Support for LDAP & Active Directory integration for enterprise environments.
