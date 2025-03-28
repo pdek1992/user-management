@@ -25,6 +25,7 @@ This will:<br>
 ```
 kubectl-useradd <username>
 ```
+✔ Select user role like Readonly Read write and Admin<br>
 ✔ Creates a Kubernetes user with the necessary permissions.
 
 # Delete a User
