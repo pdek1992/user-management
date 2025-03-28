@@ -16,7 +16,7 @@ Run the following command to install all plugins:
 ```
  curl -sSL https://raw.githubusercontent.com/pdek1992/user-management/main/install.sh | sudo bash
 ```
-This will:
+This will:<br>
 ✔ Download & install the plugins (kubectl-useradd, kubectl-userdel, kubectl-login).<br>
 ✔ Make them executable and add them to your system’s PATH.<br>
 
