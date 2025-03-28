@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Colors for better UI
+
 RED=$(tput setaf 1)
 GREEN=$(tput setaf 2)
 CYAN=$(tput setaf 6)
@@ -10,7 +10,7 @@ RESET=$(tput sgr0)
 SECRET_NAME="kube-user-passwords"
 NAMESPACE="kube-system"
 
-# Ensure exactly one argument is passed
+
 if [[ $# -ne 1 ]]; then
     echo -e "${RED}❌ kubectl userdel <username>${RESET}"
     exit 1
@@ -20,7 +20,6 @@ USERNAME="$1"
 CONTEXT="${USERNAME}-context"
 ROLE_BINDING_NAME="${USERNAME}-role"
 
-# Check if user exists
 if ! kubectl config get-contexts -o name | grep -q "^${CONTEXT}$"; then
     echo -e "${RED}❌ User '${USERNAME}' not found.${RESET}"
     exit 1
@@ -28,29 +27,29 @@ fi
 
 echo -e "${CYAN}🔹 Deleting user '${USERNAME}'...${RESET}"
 
-# Delete CSR if it exists
+
 kubectl delete csr "${USERNAME}-csr" --ignore-not-found --force --grace-period=0 >/dev/null 2>&1
 
-# Remove user and context from kubeconfig
+
 kubectl config unset users."${USERNAME}" >/dev/null 2>&1
 kubectl config unset contexts."${CONTEXT}" >/dev/null 2>&1
 
-# Delete role binding
+
 kubectl delete clusterrolebinding "${ROLE_BINDING_NAME}" --ignore-not-found --force --grace-period=0 >/dev/null 2>&1
 
-# Remove user from secret (without jq)
+
 SECRET_DATA=$(kubectl get secret "$SECRET_NAME" -n "$NAMESPACE" -o jsonpath="{.data.users}" 2>/dev/null | base64 --decode)
 
-# Check if secret data is retrieved successfully
+
 if [[ -z "$SECRET_DATA" ]]; then
     echo -e "${RED}❌ Error: Unable to retrieve secret '$SECRET_NAME' in namespace '$NAMESPACE'.${RESET}"
     exit 1
 fi
 
-# Remove user entry manually
+
 UPDATED_JSON=$(echo "$SECRET_DATA" | sed "/\"$USERNAME\" *:/d")
 
-# Encode updated JSON and patch secret
+
 ENCODED_JSON=$(echo -n "$UPDATED_JSON" | base64 -w 0)
 kubectl patch secret "$SECRET_NAME" -n "$NAMESPACE" --type='json' -p="[{'op': 'replace', 'path': '/data/users', 'value': \"$ENCODED_JSON\"}]" >/dev/null 2>&1
 
