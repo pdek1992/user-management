@@ -15,7 +15,7 @@ KubePlugins provides three Kubernetes CLI tools for user management:
 Run the following command to install all plugins:
 
 ```
-curl -sSL https://raw.githubusercontent.com/pdek1992/user-management/main/install.sh | bash
+ curl -sSL https://raw.githubusercontent.com/pdek1992/user-management/main/install.sh | sudo bash
 ```
 This will:
 ✔ Download & install the plugins (kubectl-useradd, kubectl-userdel, kubectl-login).
