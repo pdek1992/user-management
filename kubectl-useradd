@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Colors for better UI
+
 RED=$(tput setaf 1)
 GREEN=$(tput setaf 2)
 YELLOW=$(tput setaf 3)
@@ -11,7 +11,7 @@ RESET=$(tput sgr0)
 SECRET_NAME="kube-user-passwords"
 NAMESPACE="kube-system"
 
-# Ensure exactly one argument is passed
+
 if [[ $# -ne 1 ]]; then
     echo -e "${RED}❌ Usage: $0 <username>${RESET}"
     exit 1
@@ -60,25 +60,24 @@ echo -e "\n${BOLD}${CYAN}🔹 Set password for '${USERNAME}':${RESET} "
 read -rs PASSWORD
 HASHED_PASSWORD=$(echo -n "$PASSWORD" | sha256sum | awk '{print $1}')
 
-# Retrieve existing user data and update it without jq
+
 USERS_JSON=$(kubectl get secret "$SECRET_NAME" -n "$NAMESPACE" -o jsonpath="{.data.users}" | base64 --decode 2>/dev/null || echo "{}")
 if [[ -z "$USERS_JSON" ]]; then USERS_JSON="{}"; fi
 
-# Manually append the new user entry
+
 USERS_JSON=$(echo "$USERS_JSON" | sed "s/}$//")
 if [[ "$USERS_JSON" != "{}" ]]; then
     USERS_JSON="${USERS_JSON},"
 fi
 USERS_JSON="${USERS_JSON}\"$USERNAME\":\"$HASHED_PASSWORD\"}"
 
-# Base64 encode the updated JSON
 ENCODED_JSON=$(echo -n "$USERS_JSON" | base64 -w 0)
 
 kubectl patch secret "$SECRET_NAME" -n "$NAMESPACE" --type='json' -p="[{'op': 'replace', 'path': '/data/users', 'value': \"$ENCODED_JSON\"}]" >/dev/null 2>&1
 
 echo -e "\n${BOLD}${CYAN}🔹 Generating user credentials...${RESET}"
 
-# Ensure old files are deleted before creating new ones
+
 rm -f "${USERNAME}.key" "${USERNAME}.crt" "${USERNAME}.csr"
 
 openssl genrsa -out "${USERNAME}.key" 2048 >/dev/null 2>&1
