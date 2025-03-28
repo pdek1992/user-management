@@ -13,13 +13,13 @@ INSTALL_DIR="/usr/local/bin"
 
 # Loop through each plugin, download, and install
 for plugin in "${PLUGINS[@]}"; do
-    echo "➡ Installing $plugin..."
-    curl -sSL "$REPO_URL/$plugin.sh" -o "/tmp/$plugin"
+    #echo "➡ Installing $plugin..."
+    curl -sSL "$REPO_URL/$plugin" -o "/tmp/$plugin"
     chmod +x "/tmp/$plugin"
     sudo mv "/tmp/$plugin" "$INSTALL_DIR/$plugin"
 done
 
-#echo "✅ Installation complete! You can now use:"
-#echo "   - kubectl-useradd <username>"
-#echo "   - kubectl-userdel <username>"
-#echo "   - kubectl-login <username>"
+echo "✅ Installation complete! You can now use:"
+echo "   - kubectl-useradd <username>"
+echo "   - kubectl-userdel <username>"
+echo "   - kubectl-login <username>"
