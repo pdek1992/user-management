@@ -1,5 +1,4 @@
-🔥 What is KubePlugins?
-KubePlugins provides three Kubernetes CLI tools for user management:
+Kubernetes User management 
 
 1️⃣ kubectl-useradd – Automates user creation and access setup.
 2️⃣ kubectl-userdel – Removes users and cleans up permissions.
