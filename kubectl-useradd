@@ -1,6 +1,5 @@
 #!/bin/bash
 
-
 RED=$(tput setaf 1)
 GREEN=$(tput setaf 2)
 YELLOW=$(tput setaf 3)
@@ -10,7 +9,7 @@ RESET=$(tput sgr0)
 
 SECRET_NAME="kube-user-passwords"
 NAMESPACE="kube-system"
-
+KUBECONFIG_FILE="$PWD/user-config.yaml"  # Ensure the file is created in the current directory
 
 if [[ $# -ne 1 ]]; then
     echo -e "${RED}❌ Usage: $0 <username>${RESET}"
@@ -60,10 +59,8 @@ echo -e "\n${BOLD}${CYAN}🔹 Set password for '${USERNAME}':${RESET} "
 read -rs PASSWORD
 HASHED_PASSWORD=$(echo -n "$PASSWORD" | sha256sum | awk '{print $1}')
 
-
 USERS_JSON=$(kubectl get secret "$SECRET_NAME" -n "$NAMESPACE" -o jsonpath="{.data.users}" | base64 --decode 2>/dev/null || echo "{}")
 if [[ -z "$USERS_JSON" ]]; then USERS_JSON="{}"; fi
-
 
 USERS_JSON=$(echo "$USERS_JSON" | sed "s/}$//")
 if [[ "$USERS_JSON" != "{}" ]]; then
@@ -72,11 +69,9 @@ fi
 USERS_JSON="${USERS_JSON}\"$USERNAME\":\"$HASHED_PASSWORD\"}"
 
 ENCODED_JSON=$(echo -n "$USERS_JSON" | base64 -w 0)
-
 kubectl patch secret "$SECRET_NAME" -n "$NAMESPACE" --type='json' -p="[{'op': 'replace', 'path': '/data/users', 'value': \"$ENCODED_JSON\"}]" >/dev/null 2>&1
 
 echo -e "\n${BOLD}${CYAN}🔹 Generating user credentials...${RESET}"
-
 
 rm -f "${USERNAME}.key" "${USERNAME}.crt" "${USERNAME}.csr"
 
@@ -118,13 +113,34 @@ fi
 
 echo "$CERTIFICATE" | base64 -d > "${USERNAME}.crt"
 
-kubectl config set-credentials "${USERNAME}" --client-certificate="${USERNAME}.crt" --client-key="${USERNAME}.key" --embed-certs=true >/dev/null 2>&1
-kubectl config set-context "${USERNAME}-context" --cluster="${CLUSTER_NAME}" --user="${USERNAME}" >/dev/null 2>&1
+echo -e "\n${BOLD}${CYAN}🔹 Fetching available namespaces...${RESET}"
+NAMESPACES=($(kubectl get ns -o jsonpath='{.items[*].metadata.name}'))
 
-ROLE_BINDING_NAME="${USERNAME}-role"
-kubectl create clusterrolebinding "${ROLE_BINDING_NAME}" --clusterrole="${ROLE}" --user="${USERNAME}" --dry-run=client -o yaml | kubectl apply -f - >/dev/null 2>&1
+echo -e "\n${BOLD}${CYAN}🔹 Select namespace for user '${USERNAME}' (or choose all):${RESET}"
+echo -e "${YELLOW}  1) All Namespaces ${RESET}"
+for i in "${!NAMESPACES[@]}"; do
+    echo -e "${YELLOW}  $((i+2))) ${NAMESPACES[$i]} ${RESET}"
+done
+
+read -rp "➡ Enter your choice: " NAMESPACE_CHOICE
+
+if [[ "$NAMESPACE_CHOICE" -eq 1 ]]; then
+    kubectl create clusterrolebinding "${USERNAME}-role" --clusterrole="${ROLE}" --user="${USERNAME}" --dry-run=client -o yaml | kubectl apply -f - >/dev/null 2>&1
+else
+    SELECTED_NAMESPACE="${NAMESPACES[$((NAMESPACE_CHOICE-2))]}"
+    kubectl create rolebinding "${USERNAME}-role" --clusterrole="${ROLE}" --user="${USERNAME}" -n "${SELECTED_NAMESPACE}" --dry-run=client -o yaml | kubectl apply -f - >/dev/null 2>&1
+    echo -e "${GREEN}✅ User '${USERNAME}' assigned to namespace '${SELECTED_NAMESPACE}'${RESET}"
+fi
+
+kubectl config set-credentials "${USERNAME}" --client-certificate="${USERNAME}.crt" --client-key="${USERNAME}.key" --embed-certs=true --kubeconfig="${KUBECONFIG_FILE}" >/dev/null 2>&1
+kubectl config set-context "${USERNAME}-context" --cluster="${CLUSTER_NAME}" --user="${USERNAME}" --namespace="${SELECTED_NAMESPACE:-default}" --kubeconfig="${KUBECONFIG_FILE}" >/dev/null 2>&1
+
+kubectl config use-context "${USERNAME}-context" --kubeconfig="${KUBECONFIG_FILE}" >/dev/null 2>&1
 
 rm -f "${USERNAME}.csr" "$CSR_FILE" "${USERNAME}.crt" "${USERNAME}.key"
 kubectl delete csr "${USERNAME}-csr" --ignore-not-found --force --grace-period=0 >/dev/null 2>&1
 
 echo -e "${GREEN}✅ User '${USERNAME}' created successfully.${RESET}"
+echo -e "${GREEN}✅ Kubeconfig file generated at: ${KUBECONFIG_FILE}${RESET}"
+echo -e "\n${CYAN}🔹 To use this kubeconfig, append it to your environment:${RESET}"
+echo -e "${YELLOW}export KUBECONFIG=\$KUBECONFIG:${KUBECONFIG_FILE}${RESET}"
